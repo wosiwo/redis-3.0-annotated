@@ -115,7 +115,7 @@ void *listPop(list *list) {
 
 //    node = listFirst(list);
     do {
-        node = list->head; //取链表尾指针的快照
+        node = list->head; //取链表头指针的快照
         printf("listPop node \n");
 
         if (node == NULL){
@@ -125,6 +125,7 @@ void *listPop(list *list) {
     } while( AO_CASB(&list->head, node, list->head->next) != TRUE); //如果没有把结点链在尾指针上，再试
 //    AO_CASB(&list->head, p, node); //置尾结点
 
+    printf("listPop get node \n");
 
 //    if (node == NULL) {
 //        pthread_mutex_unlock(&list->mutex); //释放互斥锁
@@ -134,16 +135,22 @@ void *listPop(list *list) {
 
     value = listNodeValue(node);
 //    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+    printf("listPop  node val \n");
 
 //    listDelNode(list, node);
 
+    // 调整后置节点的指针
+    AO_CASB(&list->tail, node, node->prev); //如果当前节点是表头节点
     // 释放节点
     zfree(node);
 
     // 链表数减一
-//    atomInc(&list->len,-1);
-    incListLen(list,-1);  //原子操作
+//    list->len--;
+    incListLen(list,-1);
+    printf("listDelNode list->len-- \n");
 
+
+    printf("listPop del node \n");
 
 
 //    if (list->free) return NULL;
@@ -349,41 +356,52 @@ void listDelNode(list *list, listNode *node)
 //        continue;   //循环等待获取锁
 //    }
 
-//    pthread_mutex_lock(&list->mutex);   //获得互斥锁
+    pthread_mutex_lock(&list->mutex);   //获得互斥锁
 //    pthread_mutex_unlock(&list->mutex); //释放互斥锁
-    // 调整前置节点的指针
-    AO_CASB(&list->head, node, node->next); //如果当前节点是表头节点
-
-    listNode *prev;
-    do{
-        prev = node->prev;
-        if(prev == NULL) break;
-    }while(AO_CASB(&prev->next, node, node->next) != TRUE);
-
-
-    // 调整后置节点的指针
-    AO_CASB(&list->tail, node, node->prev); //如果当前节点是表头节点
-//    AO_CASB(&node->next->prev, node, node->prev);
-    listNode *next;
-    do{
-        next = node->next;
-        if(next == NULL) break;
-    }while(AO_CASB(&next->prev, node, node->prev) != TRUE);
-
+    printf("listDelNode \n");
+//    if(NULL==node->next){
+//        printf("listDelNode node->next NULL \n");
+//
+//    }
 //    // 调整前置节点的指针
-//    if (node->prev)
-//        node->prev->next = node->next;
-//    else
-//        list->head = node->next;
+//    AO_CASB(&list->head, node, node->next); //如果当前节点是表头节点
+//    printf("listDelNode1 \n");
+//
+//    listNode *prev;
+//    do{
+//        prev = node->prev;
+//        printf("listDelNode1 prev %p \n",prev);
+//
+//        if(prev == NULL) break;
+//    }while(AO_CASB(&prev->next, node, node->next) != TRUE);
+//    printf("listDelNode prev \n");
+//
+//
+//    // 调整后置节点的指针
+//    AO_CASB(&list->tail, node, node->prev); //如果当前节点是表头节点
+//    AO_CASB(&node->next->prev, node, node->prev);
+//    listNode *next;
+//    do{
+//        next = node->next;
+//        if(next == NULL) break;
+//    }while(AO_CASB(&next->prev, node, node->prev) != TRUE);
+//    printf("listDelNode next \n");
+
+    // 调整前置节点的指针
+    if (node->prev)
+        node->prev->next = node->next;
+    else
+        list->head = node->next;
 
     // 调整后置节点的指针
-//    if (node->next)
-//        node->next->prev = node->prev;
-//    else
-//        list->tail = node->prev;
+    if (node->next)
+        node->next->prev = node->prev;
+    else
+        list->tail = node->prev;
 
     // 释放值
     if (list->free) list->free(node->value);
+
 
     // 释放节点
     zfree(node);
@@ -391,9 +409,11 @@ void listDelNode(list *list, listNode *node)
     // 链表数减一
 //    list->len--;
     incListLen(list,-1);
+    printf("listDelNode list->len-- \n");
+
 
 //    AO_CASB(&list->atom_switch,0,1);
-//    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 
 }
 

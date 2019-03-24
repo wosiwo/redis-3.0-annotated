@@ -1070,6 +1070,7 @@ void freeClient(redisClient *c) {
     if (c->fd != -1) {
         ln = listSearchKey(server.clients,c);
         redisAssert(ln != NULL);
+        printf("listDelNode(server.clients,ln) \n");
         listDelNode(server.clients,ln);
     }
 
@@ -1079,6 +1080,7 @@ void freeClient(redisClient *c) {
     if (c->flags & REDIS_UNBLOCKED) {
         ln = listSearchKey(server.unblocked_clients,c);
         redisAssert(ln != NULL);
+        printf("listDelNode(server.unblocked_clients,ln) \n");
         listDelNode(server.unblocked_clients,ln);
     }
 
@@ -1092,6 +1094,7 @@ void freeClient(redisClient *c) {
         list *l = (c->flags & REDIS_MONITOR) ? server.monitors : server.slaves;
         ln = listSearchKey(l,c);
         redisAssert(ln != NULL);
+        printf("listDelNode(l,ln) \n");
         listDelNode(l,ln);
         /* We need to remember the time when we started to have zero
          * attached slaves, as after some time we'll free the replication
@@ -1110,6 +1113,7 @@ void freeClient(redisClient *c) {
     if (c->flags & REDIS_CLOSE_ASAP) {
         ln = listSearchKey(server.clients_to_close,c);
         redisAssert(ln != NULL);
+        printf("server.clients_to_close(l,ln) \n");
         listDelNode(server.clients_to_close,ln);
     }
 
