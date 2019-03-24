@@ -103,24 +103,40 @@ void listRelease(list *list)
 
 void *listPop(list *list) {
 //    redisLog(REDIS_NOTICE,"listPop \n");
-    pthread_mutex_lock(&list->mutex);   //获得互斥锁
+//    pthread_mutex_lock(&list->mutex);   //获得互斥锁
 //    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 //    redisLog(REDIS_NOTICE,"listPop pthread_mutex_lock \n");
 
     listNode *node;
     void *value;
 
-    node = listFirst(list);
-    if (node == NULL) {
-        pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//    node = listFirst(list);
+    do {
+        node = list->head; //取链表尾指针的快照
+        node->next->prev = NULL;
+        if (node == NULL) return NULL;
 
-        return NULL;
-    }
+    } while( AO_CASB(&list->head, node, list->head->next) != TRUE); //如果没有把结点链在尾指针上，再试
+//    AO_CASB(&list->head, p, node); //置尾结点
+
+
+//    if (node == NULL) {
+//        pthread_mutex_unlock(&list->mutex); //释放互斥锁
+
+//        return NULL;
+//    }
 
     value = listNodeValue(node);
-    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 
-    listDelNode(list, node);
+//    listDelNode(list, node);
+
+    // 释放节点
+    zfree(node);
+
+    // 链表数减一
+    atomInc(list->len,-1);
+
 
 //    if (list->free) return NULL;
 
@@ -200,7 +216,7 @@ list *listAddNodeTail(list *list, void *value)
 //    while(!AO_CASB(&list->atom_switch,1,0)){
 //        continue;   //循环等待获取锁
 //    }
-    pthread_mutex_lock(&list->mutex);   //获得互斥锁
+//    pthread_mutex_lock(&list->mutex);   //获得互斥锁
     listNode *node;
 
     // 为新节点分配内存
@@ -209,24 +225,50 @@ list *listAddNodeTail(list *list, void *value)
 
     // 保存值指针
     node->value = value;
-    // 目标链表为空
-    if (list->len == 0) {
-        list->head = list->tail = node;
-        node->prev = node->next = NULL;
-    // 目标链表非空
-    } else {
-        node->prev = list->tail;
-        node->next = NULL;
-        list->tail->next = node;
-        list->tail = node;
+    node->next = NULL;
+
+//    listNode *tail = list->tail;
+    listNode *p;
+    //节点放到表尾
+    p = list->tail; //取链表尾指针的快照
+    if(AO_CASB(&list->tail, NULL, node) == TRUE){ //表尾指针为空
+        AO_CASB(&list->head, NULL, node);    //这时表头指针也应该为NULL
+        node->prev = NULL;
+    }else{
+        do {
+            p = list->tail; //取链表尾指针的快照
+        } while( AO_CASB(&p->next, NULL, node) != TRUE); //如果没有把结点链在尾指针上，再试
+        AO_CASB(&list->tail, p, node); //置尾结点
+        node->prev = p;
     }
+//
+//
+//    // 目标链表为空
+//    if (list->len == 0) {
+//        list->head = list->tail = node;
+//        node->prev = NULL;
+//    // 目标链表非空
+//    } else {
+//        node->prev = list->tail;
+//        list->tail->next = node;
+//        list->tail = node;
+//    }
 
     // 更新链表节点数
-    list->len++;
+//    list->len++;
+    atomInc(&list->len,1);  //++不是原子操作
 //    AO_CASB(&list->atom_switch,0,1); //释放锁
-    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 
     return list;
+}
+
+int atomInc(unsigned long *len,int incNum){
+    unsigned long val;
+    do {
+        val = *len + incNum; //取链表尾指针的快照
+    } while( AO_CASB(&len, len, val) != TRUE);
+    return val;
 }
 
 /*
