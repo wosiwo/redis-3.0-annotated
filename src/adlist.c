@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <stdio.h>
 #include "adlist.h"
 #include "zmalloc.h"
 
@@ -109,13 +110,18 @@ void *listPop(list *list) {
 
     listNode *node;
     void *value;
+    printf("listPop list->len %d \n",list->len);
+
 
 //    node = listFirst(list);
     do {
         node = list->head; //取链表尾指针的快照
-        node->next->prev = NULL;
-        if (node == NULL) return NULL;
+        printf("listPop node \n");
 
+        if (node == NULL){
+            printf("listPop node null \n");
+            return NULL;
+        }
     } while( AO_CASB(&list->head, node, list->head->next) != TRUE); //如果没有把结点链在尾指针上，再试
 //    AO_CASB(&list->head, p, node); //置尾结点
 
@@ -135,7 +141,9 @@ void *listPop(list *list) {
     zfree(node);
 
     // 链表数减一
-    atomInc(list->len,-1);
+//    atomInc(&list->len,-1);
+    incListLen(list,-1);  //原子操作
+
 
 
 //    if (list->free) return NULL;
@@ -233,7 +241,7 @@ list *listAddNodeTail(list *list, void *value)
     p = list->tail; //取链表尾指针的快照
     if(AO_CASB(&list->tail, NULL, node) == TRUE){ //表尾指针为空
         AO_CASB(&list->head, NULL, node);    //这时表头指针也应该为NULL
-        node->prev = NULL;
+//        node->prev = NULL;
     }else{
         do {
             p = list->tail; //取链表尾指针的快照
@@ -256,7 +264,8 @@ list *listAddNodeTail(list *list, void *value)
 
     // 更新链表节点数
 //    list->len++;
-    atomInc(&list->len,1);  //++不是原子操作
+    incListLen(list,1);  //++不是原子操作
+
 //    AO_CASB(&list->atom_switch,0,1); //释放锁
 //    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 
@@ -340,20 +349,38 @@ void listDelNode(list *list, listNode *node)
 //        continue;   //循环等待获取锁
 //    }
 
-    pthread_mutex_lock(&list->mutex);   //获得互斥锁
+//    pthread_mutex_lock(&list->mutex);   //获得互斥锁
 //    pthread_mutex_unlock(&list->mutex); //释放互斥锁
-
     // 调整前置节点的指针
-    if (node->prev)
-        node->prev->next = node->next;
-    else
-        list->head = node->next;
+    AO_CASB(&list->head, node, node->next); //如果当前节点是表头节点
+
+    listNode *prev;
+    do{
+        prev = node->prev;
+        if(prev == NULL) break;
+    }while(AO_CASB(&prev->next, node, node->next) != TRUE);
+
 
     // 调整后置节点的指针
-    if (node->next)
-        node->next->prev = node->prev;
-    else
-        list->tail = node->prev;
+    AO_CASB(&list->tail, node, node->prev); //如果当前节点是表头节点
+//    AO_CASB(&node->next->prev, node, node->prev);
+    listNode *next;
+    do{
+        next = node->next;
+        if(next == NULL) break;
+    }while(AO_CASB(&next->prev, node, node->prev) != TRUE);
+
+//    // 调整前置节点的指针
+//    if (node->prev)
+//        node->prev->next = node->next;
+//    else
+//        list->head = node->next;
+
+    // 调整后置节点的指针
+//    if (node->next)
+//        node->next->prev = node->prev;
+//    else
+//        list->tail = node->prev;
 
     // 释放值
     if (list->free) list->free(node->value);
@@ -362,10 +389,26 @@ void listDelNode(list *list, listNode *node)
     zfree(node);
 
     // 链表数减一
-    list->len--;
-//    AO_CASB(&list->atom_switch,0,1);
-    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//    list->len--;
+    incListLen(list,-1);
 
+//    AO_CASB(&list->atom_switch,0,1);
+//    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+
+}
+
+/**
+ * 原子操作修改链表长度
+ * @param list
+ * @param inc
+ */
+int incListLen(list *list,int inc){
+    unsigned long val;
+    do {
+        val = list->len + inc; //取链表尾指针的快照
+    } while( AO_CASB(&list->len, list->len, val) != TRUE);
+    printf("listAddNodeTail list->len %d \n",list->len);
+    return val;
 }
 
 /* Returns a list iterator 'iter'. After the initialization every
