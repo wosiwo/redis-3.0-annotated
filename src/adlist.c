@@ -669,27 +669,20 @@ void *atomListPop(list *list) {
 
 
 //    node = listFirst(list);
-    flushListHead(list);
+//    flushListHead(list);
     do {
+        flushListTail(list);
+
         //刷新head指针到链表头部
-        node = list->head; //取链表头指针的快照
+        node = list->tail; //取链表头指针的快照
         printf("listPop node \n");
 
         if (node == NULL){
             printf("listPop node null \n");
-            if(NULL==list->tail){
-                printf("listPop tail node null \n");
-                return NULL;
-            }else{
-                printf("listPop tail node not null \n");
-                flushListHeadFromTail(list);
-            }
+            return NULL;
         }
-    } while( AO_CASB(&list->head, node, list->head->next) != true); //如果没有把结点链在尾指针上，再试
-//    AO_CASB(&list->head, p, node); //置尾结点
-    // 如果当前节点是表尾节点
-    AO_CASB(&list->tail, node, NULL);
-
+    } while( AO_CASB(&list->tail, node, node->prev) != true); //如果没有把结点链在尾指针上，再试
+    AO_CASB(&node->prev->next, node, node->next);
     printf("listPop get node \n");
 
 //    if (node == NULL) {
@@ -753,10 +746,11 @@ void flushListTail(list *list){
     listNode *tmp = NULL;
     //刷新head指针
     do{
-        tmp = list->head;
+        tmp = list->tail;
         if(NULL==tmp) break;
-        if(NULL==tmp->prev) break;
-        AO_CASB(&list->head, tmp, tmp->prev);
+        printf("tmp %p tmp->next %p",tmp,tmp->next)
+        if(NULL==tmp->next) break;
+        AO_CASB(&list->tail, tmp, tmp->next);
     }while(1);
 }
 //线程安全的将节点插入表头
@@ -774,14 +768,16 @@ void flushNodeToHead(list *list,listNode *node){
 //线程安全的将节点插入表尾
 void flushNodeToTail(list *list,listNode *node){
     listNode *tmp = NULL;
-    AO_CASB(&list->tail, NULL, node);
+    if(AO_CASB(&list->tail, NULL, node)==true){
+        return;
+    }
     do {
         if(NULL==tmp){
             tmp = list->tail; //list->head 不为空，则将node放入head指向节点的前一个节点
-            if(NULL==tmp) break;
         }else{
             tmp = tmp->next;
         }
+        if(NULL==tmp) break;
         node->prev = tmp;
 
     } while( AO_CASB(&tmp->next, NULL, node) != true); //如果没有把结点链在尾指针上，再试
@@ -835,22 +831,22 @@ list *atomListAddNodeTail(list *list, void *value)
     if(AO_CASB(&list->tail, NULL, node) == true){ //表尾指针为空
         printf("list first add \n");
         //这时表头指针也应该为NULL
-        if(AO_CASB(&list->head, NULL, node)!=true){
-            printf("list->head shoud be null except\n");
-            //追加插入到表头
-            flushNodeToHead(list,node);
-            //刷新head指针
-            flushListHead(list);
-        }
+//        if(AO_CASB(&list->head, NULL, node)!=true){
+//            printf("list->head shoud be null except\n");
+//            //追加插入到表头
+//            flushNodeToHead(list,node);
+//            //刷新head指针
+//            flushListHead(list);
+//        }
     }else{
-        AO_CASB(&list->head, NULL, node);   //防止head指向NULL
+//        AO_CASB(&list->head, NULL, node);   //防止head指向NULL
 
         //将节点插入链表尾部
         flushNodeToTail(list,node);
         //将list->tail 指向最后一个节点
         flushListTail(list);
         //刷新head指针
-        flushListHead(list);
+//        flushListHead(list);
 
     }
 //
