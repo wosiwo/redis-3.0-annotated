@@ -27,7 +27,7 @@ void reactorReadHandle(aeEventLoop *el,int connfd, void *privdata, int mask){
 
     if(!ret){    //读到eof或者客户端关闭连接，不再把连接抛给woker线程
 //        c->cron_switch=1;       //解锁
-        redisLog(REDIS_WARNING,"querybuf null reactor_id %d connfd %d ",c->reactor_id,connfd);
+        redisLog(REDIS_NOTICE,"querybuf null reactor_id %d connfd %d ",c->reactor_id,connfd);
         return;
     }
     redisLog(REDIS_NOTICE,"reactorReadHandle reactor_id %d c->request_times %d connfd %d ",c->reactor_id,c->request_times,connfd);

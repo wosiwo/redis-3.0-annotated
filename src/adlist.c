@@ -691,9 +691,9 @@ void *atomListPop(list *list) {
     node->prev = NULL;
     node->next = NULL;
 
-    pthread_mutex_lock(&list->mutex);   //获得互斥锁
+//    pthread_mutex_lock(&list->mutex);   //获得互斥锁
     zfree(node);
-    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 
     //printf("listPop  zfree(node) \n");
 
@@ -753,22 +753,22 @@ list *atomListAddNodeTail(list *list, void *value)
 //    while(!AO_CASB(&list->atom_switch,1,0)){
 //        continue;   //循环等待获取锁
 //    }
-    pthread_mutex_lock(&list->mutex);   //获得互斥锁
+//    pthread_mutex_lock(&list->mutex);   //获得互斥锁
     listNode *node;
     listNode *hnode;
 
 
     // 为新节点分配内存
     if ((node = zmalloc(sizeof(*node))) == NULL){
-        pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//        pthread_mutex_unlock(&list->mutex); //释放互斥锁
         return NULL;
     }
     // 为临时head节点分配内存
     if ((hnode = zmalloc(sizeof(*hnode))) == NULL){
-        pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//        pthread_mutex_unlock(&list->mutex); //释放互斥锁
         return NULL;
     }
-    pthread_mutex_unlock(&list->mutex); //释放互斥锁
+//    pthread_mutex_unlock(&list->mutex); //释放互斥锁
 
     // 保存值指针
     node->value = value;
